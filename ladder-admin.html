@@ -178,9 +178,11 @@
 
 <script>
   // ---- Supabase connection ----
+  // NOTE: the library itself loads as a global called "supabase" (from the CDN script),
+  // so our own client variable must NOT be called "supabase" too - hence "sb" below.
   const SUPABASE_URL = 'https://zauaufublfdsgqvbcrom.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_dUwyPER_FzegXUKFGwqvFA_asKUNorp';
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let members = [];
   let currentLadderId = null;
@@ -210,7 +212,7 @@
 
   // ---- Load members for the dropdowns ----
   async function loadMembers() {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('members')
       .select('id, name')
       .order('name');
@@ -226,7 +228,7 @@
 
   // ---- Load existing ladders ----
   async function loadLadders() {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('ladders')
       .select('id, name, type, season_year, status')
       .order('created_at', { ascending: false });
@@ -247,7 +249,7 @@
       setStatus(ladderStatus, 'Please enter a name and season year.', true);
       return;
     }
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('ladders')
       .insert({ name, type, season_year: year })
       .select()
@@ -293,7 +295,7 @@
     const sure = confirm(`Delete "${label}"? This also removes all its positions and challenge history. This cannot be undone.`);
     if (!sure) return;
 
-    const { error } = await supabase
+    const { error } = await sb
       .from('ladders')
       .delete()
       .eq('id', currentLadderId);
@@ -311,7 +313,7 @@
 
   // ---- Load entries for the current ladder ----
   async function loadEntries() {
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from('ladder_entries')
       .select('id, position, member_id_1, member_id_2')
       .eq('ladder_id', currentLadderId)
@@ -352,7 +354,7 @@
 
     if (!position) {
       // work out the next free position automatically
-      const { data } = await supabase
+      const { data } = await sb
         .from('ladder_entries')
         .select('position')
         .eq('ladder_id', currentLadderId)
@@ -361,20 +363,20 @@
       position = (data && data[0] ? data[0].position : 0) + 1;
     } else {
       // inserting mid-ladder: shift everyone at or below this position down by one
-      const { data: toShift } = await supabase
+      const { data: toShift } = await sb
         .from('ladder_entries')
         .select('id, position')
         .eq('ladder_id', currentLadderId)
         .gte('position', position)
         .order('position', { ascending: false });
       for (const row of (toShift || [])) {
-        await supabase.from('ladder_entries')
+        await sb.from('ladder_entries')
           .update({ position: row.position + 1 })
           .eq('id', row.id);
       }
     }
 
-    const { error } = await supabase
+    const { error } = await sb
       .from('ladder_entries')
       .insert({
         ladder_id: currentLadderId,
