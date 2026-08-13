@@ -99,4 +99,305 @@
     font-size: 0.85rem;
   }
   .status.error { color: #b3261e; }
-  .status.ok {
+  .status.ok { color: var(--rcc-green); }
+  .muted { color: #888; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ladder Admin</h1>
+  <a href="index.html">&larr; Back to Competitions</a>
+</header>
+
+<main>
+
+  <!-- Step 1: choose or create a ladder -->
+  <div class="card">
+    <h2>1. Select or create a ladder</h2>
+
+    <label for="ladderSelect">Existing ladders</label>
+    <select id="ladderSelect">
+      <option value="">-- choose a ladder --</option>
+    </select>
+
+    <p class="muted">Or create a new one:</p>
+    <div class="row">
+      <div>
+        <label for="newName">Name</label>
+        <input id="newName" type="text" placeholder="e.g. Singles Ladder 2026">
+      </div>
+      <div>
+        <label for="newType">Type</label>
+        <select id="newType">
+          <option value="singles">Singles</option>
+          <option value="doubles">Doubles</option>
+        </select>
+      </div>
+      <div>
+        <label for="newYear">Season year</label>
+        <input id="newYear" type="number" placeholder="2026">
+      </div>
+    </div>
+    <button id="createLadderBtn">Create ladder</button>
+    <button id="deleteLadderBtn" class="secondary" style="display:none;">Delete selected ladder</button>
+    <div id="ladderStatus" class="status"></div>
+  </div>
+
+  <!-- Step 2: manage entries on the selected ladder -->
+  <div class="card" id="entriesCard" style="display:none;">
+    <h2>2. Set positions</h2>
+    <p class="muted">Add members in the order the committee drew them from the hat. Position numbers are assigned automatically as you add — use "Insert" further down to slot someone into an existing ladder later.</p>
+
+    <div class="row">
+      <div>
+        <label for="member1Select">Member</label>
+        <select id="member1Select"></select>
+      </div>
+      <div id="member2Wrap" style="display:none;">
+        <label for="member2Select">Partner (doubles)</label>
+        <select id="member2Select"></select>
+      </div>
+      <div>
+        <label for="positionInput">Position</label>
+        <input id="positionInput" type="number" min="1" placeholder="auto">
+      </div>
+    </div>
+    <button id="addEntryBtn">Add to ladder</button>
+    <div id="entryStatus" class="status"></div>
+
+    <table id="entriesTable">
+      <thead>
+        <tr><th>Pos</th><th>Player(s)</th><th></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+</main>
+
+<script>
+  // ---- Supabase connection ----
+  const SUPABASE_URL = 'https://zauaufublfdsgqvbcrom.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_dUwyPER_FzegXUKFGwqvFA_asKUNorp';
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let members = [];
+  let currentLadderId = null;
+  let currentLadderType = 'singles';
+
+  const ladderSelect   = document.getElementById('ladderSelect');
+  const newName        = document.getElementById('newName');
+  const newType        = document.getElementById('newType');
+  const newYear        = document.getElementById('newYear');
+  const createLadderBtn= document.getElementById('createLadderBtn');
+  const deleteLadderBtn= document.getElementById('deleteLadderBtn');
+  const ladderStatus   = document.getElementById('ladderStatus');
+
+  const entriesCard    = document.getElementById('entriesCard');
+  const member1Select  = document.getElementById('member1Select');
+  const member2Select  = document.getElementById('member2Select');
+  const member2Wrap    = document.getElementById('member2Wrap');
+  const positionInput  = document.getElementById('positionInput');
+  const addEntryBtn    = document.getElementById('addEntryBtn');
+  const entryStatus    = document.getElementById('entryStatus');
+  const entriesTbody   = document.querySelector('#entriesTable tbody');
+
+  function setStatus(el, msg, isError) {
+    el.textContent = msg;
+    el.className = 'status ' + (isError ? 'error' : 'ok');
+  }
+
+  // ---- Load members for the dropdowns ----
+  async function loadMembers() {
+    const { data, error } = await supabase
+      .from('members')
+      .select('id, name')
+      .order('name');
+    if (error) {
+      console.error(error);
+      return;
+    }
+    members = data || [];
+    [member1Select, member2Select].forEach(sel => {
+      sel.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+    });
+  }
+
+  // ---- Load existing ladders ----
+  async function loadLadders() {
+    const { data, error } = await supabase
+      .from('ladders')
+      .select('id, name, type, season_year, status')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error(error);
+      return;
+    }
+    ladderSelect.innerHTML = '<option value="">-- choose a ladder --</option>' +
+      (data || []).map(l => `<option value="${l.id}" data-type="${l.type}">${l.name} (${l.season_year})</option>`).join('');
+  }
+
+  // ---- Create a new ladder ----
+  createLadderBtn.addEventListener('click', async () => {
+    const name = newName.value.trim();
+    const type = newType.value;
+    const year = parseInt(newYear.value, 10);
+    if (!name || !year) {
+      setStatus(ladderStatus, 'Please enter a name and season year.', true);
+      return;
+    }
+    const { data, error } = await supabase
+      .from('ladders')
+      .insert({ name, type, season_year: year })
+      .select()
+      .single();
+    if (error) {
+      setStatus(ladderStatus, 'Error: ' + error.message, true);
+      return;
+    }
+    setStatus(ladderStatus, `Created "${data.name}".`, false);
+    newName.value = '';
+    newYear.value = '';
+    await loadLadders();
+    ladderSelect.value = data.id;
+    selectLadder(data.id, data.type);
+  });
+
+  // ---- Selecting a ladder from the dropdown ----
+  ladderSelect.addEventListener('change', () => {
+    const opt = ladderSelect.selectedOptions[0];
+    if (!opt || !opt.value) {
+      entriesCard.style.display = 'none';
+      deleteLadderBtn.style.display = 'none';
+      currentLadderId = null;
+      return;
+    }
+    selectLadder(opt.value, opt.dataset.type);
+  });
+
+  function selectLadder(id, type) {
+    currentLadderId = id;
+    currentLadderType = type;
+    member2Wrap.style.display = (type === 'doubles') ? '' : 'none';
+    entriesCard.style.display = '';
+    deleteLadderBtn.style.display = '';
+    loadEntries();
+  }
+
+  // ---- Delete the selected ladder (and its entries/challenges, via cascade) ----
+  deleteLadderBtn.addEventListener('click', async () => {
+    if (!currentLadderId) return;
+    const opt = ladderSelect.selectedOptions[0];
+    const label = opt ? opt.textContent : 'this ladder';
+    const sure = confirm(`Delete "${label}"? This also removes all its positions and challenge history. This cannot be undone.`);
+    if (!sure) return;
+
+    const { error } = await supabase
+      .from('ladders')
+      .delete()
+      .eq('id', currentLadderId);
+
+    if (error) {
+      setStatus(ladderStatus, 'Error: ' + error.message, true);
+      return;
+    }
+    setStatus(ladderStatus, `Deleted "${label}".`, false);
+    currentLadderId = null;
+    entriesCard.style.display = 'none';
+    deleteLadderBtn.style.display = 'none';
+    await loadLadders();
+  });
+
+  // ---- Load entries for the current ladder ----
+  async function loadEntries() {
+    const { data, error } = await supabase
+      .from('ladder_entries')
+      .select('id, position, member_id_1, member_id_2')
+      .eq('ladder_id', currentLadderId)
+      .order('position');
+    if (error) {
+      console.error(error);
+      return;
+    }
+    const nameOf = id => (members.find(m => m.id === id) || {}).name || '(unknown)';
+    entriesTbody.innerHTML = (data || []).map(e => `
+      <tr>
+        <td>${e.position}</td>
+        <td>${nameOf(e.member_id_1)}${e.member_id_2 ? ' &amp; ' + nameOf(e.member_id_2) : ''}</td>
+        <td></td>
+      </tr>
+    `).join('');
+
+    // suggest the next position number
+    const maxPos = (data || []).reduce((m, e) => Math.max(m, e.position), 0);
+    positionInput.placeholder = 'auto (' + (maxPos + 1) + ')';
+  }
+
+  // ---- Add an entry ----
+  addEntryBtn.addEventListener('click', async () => {
+    if (!currentLadderId) return;
+    const member1 = member1Select.value;
+    const member2 = currentLadderType === 'doubles' ? member2Select.value : null;
+    let position = parseInt(positionInput.value, 10);
+
+    if (!member1) {
+      setStatus(entryStatus, 'Please choose a member.', true);
+      return;
+    }
+    if (currentLadderType === 'doubles' && member1 === member2) {
+      setStatus(entryStatus, 'Please choose two different members for a doubles pair.', true);
+      return;
+    }
+
+    if (!position) {
+      // work out the next free position automatically
+      const { data } = await supabase
+        .from('ladder_entries')
+        .select('position')
+        .eq('ladder_id', currentLadderId)
+        .order('position', { ascending: false })
+        .limit(1);
+      position = (data && data[0] ? data[0].position : 0) + 1;
+    } else {
+      // inserting mid-ladder: shift everyone at or below this position down by one
+      const { data: toShift } = await supabase
+        .from('ladder_entries')
+        .select('id, position')
+        .eq('ladder_id', currentLadderId)
+        .gte('position', position)
+        .order('position', { ascending: false });
+      for (const row of (toShift || [])) {
+        await supabase.from('ladder_entries')
+          .update({ position: row.position + 1 })
+          .eq('id', row.id);
+      }
+    }
+
+    const { error } = await supabase
+      .from('ladder_entries')
+      .insert({
+        ladder_id: currentLadderId,
+        position,
+        member_id_1: member1,
+        member_id_2: member2
+      });
+
+    if (error) {
+      setStatus(entryStatus, 'Error: ' + error.message, true);
+      return;
+    }
+    setStatus(entryStatus, 'Added at position ' + position + '.', false);
+    positionInput.value = '';
+    await loadEntries();
+  });
+
+  // ---- Init ----
+  (async function init() {
+    await loadMembers();
+    await loadLadders();
+  })();
+</script>
+
+</body>
+</html>
