@@ -187,6 +187,7 @@
   let members = [];
   let currentLadderId = null;
   let currentLadderType = 'singles';
+  let currentEntries = [];
 
   const ladderSelect   = document.getElementById('ladderSelect');
   const newName        = document.getElementById('newName');
@@ -322,6 +323,7 @@
       console.error(error);
       return;
     }
+    currentEntries = data || [];
     const nameOf = id => (members.find(m => m.id === id) || {}).name || '(unknown)';
     entriesTbody.innerHTML = (data || []).map(e => `
       <tr>
@@ -349,6 +351,18 @@
     }
     if (currentLadderType === 'doubles' && member1 === member2) {
       setStatus(entryStatus, 'Please choose two different members for a doubles pair.', true);
+      return;
+    }
+
+    const alreadyOnLadder = id => currentEntries.some(e => e.member_id_1 === id || e.member_id_2 === id);
+    if (alreadyOnLadder(member1)) {
+      const nm = (members.find(m => m.id === member1) || {}).name || 'That member';
+      setStatus(entryStatus, `${nm} is already on this ladder.`, true);
+      return;
+    }
+    if (currentLadderType === 'doubles' && member2 && alreadyOnLadder(member2)) {
+      const nm = (members.find(m => m.id === member2) || {}).name || 'That member';
+      setStatus(entryStatus, `${nm} is already on this ladder.`, true);
       return;
     }
 
