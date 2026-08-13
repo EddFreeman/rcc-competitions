@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCC Ladder Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --rcc-green: #2C5F3F;
+    --rcc-gold: #b8922a;
+    --rcc-cream: #faf8f3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--rcc-cream);
+    color: #2a2a2a;
+  }
+  header {
+    background: var(--rcc-green);
+    color: var(--rcc-cream);
+    padding: 1.5rem;
+    text-align: center;
+    border-bottom: 4px solid var(--rcc-gold);
+  }
+  header h1 { margin: 0; font-size: 1.5rem; }
+  header a {
+    color: var(--rcc-gold);
+    text-decoration: none;
+    font-size: 0.85rem;
+  }
+  main {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 0 1.5rem 3rem;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #e5ded0;
+    border-left: 5px solid var(--rcc-gold);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    margin-top: 0;
+    color: var(--rcc-green);
+    font-size: 1.15rem;
+  }
+  label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #555;
+    margin: 0.75rem 0 0.25rem;
+  }
+  input, select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.95rem;
+  }
+  .row { display: flex; gap: 1rem; }
+  .row > div { flex: 1; }
+  button {
+    background: var(--rcc-green);
+    color: #fff;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    margin-top: 1rem;
+  }
+  button:hover { background: #234a32; }
+  button.secondary {
+    background: transparent;
+    color: var(--rcc-green);
+    border: 1px solid var(--rcc-green);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 1px solid #eee;
+  }
+  th { color: var(--rcc-green); }
+  .status {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+  }
+  .status.error { color: #b3261e; }
+  .status.ok {
