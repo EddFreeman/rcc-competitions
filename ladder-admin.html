@@ -454,6 +454,18 @@
   (async function init() {
     await loadMembers();
     await loadLadders();
+
+    // Carry the member id through to other pages on this site (e.g. "Back to Competitions")
+    const params = new URLSearchParams(window.location.search);
+    const urlMemberId = params.get('member');
+    if (urlMemberId) {
+      document.querySelectorAll('a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('http') || href.startsWith('#')) return;
+        const sep = href.includes('?') ? '&' : '?';
+        a.setAttribute('href', href + sep + 'member=' + encodeURIComponent(urlMemberId));
+      });
+    }
   })();
 </script>
 
