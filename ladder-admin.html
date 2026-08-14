@@ -329,13 +329,55 @@
       <tr>
         <td>${e.position}</td>
         <td>${nameOf(e.member_id_1)}${e.member_id_2 ? ' &amp; ' + nameOf(e.member_id_2) : ''}</td>
-        <td></td>
+        <td><button class="secondary deleteEntryBtn" data-entry-id="${e.id}" data-position="${e.position}" style="margin-top:0; padding:0.3rem 0.7rem; font-size:0.8rem;">Delete</button></td>
       </tr>
     `).join('');
+
+    entriesTbody.querySelectorAll('.deleteEntryBtn').forEach(btn => {
+      btn.addEventListener('click', () => deleteEntry(btn.dataset.entryId, btn.dataset.position));
+    });
 
     // suggest the next position number
     const maxPos = (data || []).reduce((m, e) => Math.max(m, e.position), 0);
     positionInput.placeholder = 'auto (' + (maxPos + 1) + ')';
+  }
+
+  // ---- Delete a single entry (position) and close the gap below it ----
+  async function deleteEntry(entryId, position) {
+    const entry = currentEntries.find(e => e.id === entryId);
+    const label = entry
+      ? (members.find(m => m.id === entry.member_id_1) || {}).name +
+        (entry.member_id_2 ? ' & ' + (members.find(m => m.id === entry.member_id_2) || {}).name : '')
+      : 'this entry';
+    const sure = confirm(`Remove ${label} from position ${position}? Everyone below will move up one place.`);
+    if (!sure) return;
+
+    const { error: delError } = await sb
+      .from('ladder_entries')
+      .delete()
+      .eq('id', entryId);
+
+    if (delError) {
+      setStatus(entryStatus, 'Error: ' + delError.message, true);
+      return;
+    }
+
+    // shift everyone below the deleted position up by one
+    const { data: toShift } = await sb
+      .from('ladder_entries')
+      .select('id, position')
+      .eq('ladder_id', currentLadderId)
+      .gt('position', position)
+      .order('position', { ascending: true });
+
+    for (const row of (toShift || [])) {
+      await sb.from('ladder_entries')
+        .update({ position: row.position - 1 })
+        .eq('id', row.id);
+    }
+
+    setStatus(entryStatus, `Removed ${label}.`, false);
+    await loadEntries();
   }
 
   // ---- Add an entry ----
