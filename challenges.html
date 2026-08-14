@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCC Ladder Challenges</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --rcc-green: #2C5F3F;
+    --rcc-gold: #b8922a;
+    --rcc-cream: #faf8f3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--rcc-cream);
+    color: #2a2a2a;
+  }
+  header {
+    background: var(--rcc-green);
+    color: var(--rcc-cream);
+    padding: 1.5rem;
+    text-align: center;
+    border-bottom: 4px solid var(--rcc-gold);
+  }
+  header h1 { margin: 0; font-size: 1.5rem; }
+  header a { color: var(--rcc-gold); text-decoration: none; font-size: 0.85rem; }
+  main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem 3rem; }
+  .card {
+    background: #fff;
+    border: 1px solid #e5ded0;
+    border-left: 5px solid var(--rcc-gold);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .card h2 { margin-top: 0; color: var(--rcc-green); font-size: 1.15rem; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin: 0.75rem 0 0.25rem; }
+  input, select {
+    width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 0.95rem;
+  }
+  .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 150px; }
+  button {
+    background: var(--rcc-green); color: #fff; border: none; padding: 0.6rem 1.2rem;
+    border-radius: 4px; font-size: 0.9rem; cursor: pointer; margin-top: 1rem;
+  }
+  button:hover { background: #234a32; }
+  button.secondary { background: transparent; color: var(--rcc-green); border: 1px solid var(--rcc-green); }
+  button.small { padding: 0.35rem 0.8rem; font-size: 0.8rem; margin: 0.25rem 0.25rem 0 0; }
+  button.gold { background: var(--rcc-gold); }
+  button.gold:hover { background: #a07d22; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  th { color: var(--rcc-green); }
+  .status { margin-top: 0.75rem; font-size: 0.85rem; }
+  .status.error { color: #b3261e; }
+  .status.ok { color: var(--rcc-green); }
+  .muted { color: #888; font-size: 0.85rem; }
+  .badge {
+    display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 10px;
+    background: #f0ead9; color: var(--rcc-green); margin-left: 0.4rem;
+  }
+  .badge.claimable { background: #fbe4e1; color: #b3261e; }
+  .eligible-btn { margin-right: 0.5rem; }
+  #adminPanel { display: none; }
+  #adminGate { margin-top: 1rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ladder Challenges</h1>
+  <a href="index.html">&larr; Back to Competitions</a>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Ladder</h2>
+    <label for="ladderSelect">Choose a ladder</label>
+    <select id="ladderSelect"><option value="">-- choose a ladder --</option></select>
+  </div>
+
+  <div id="standingsCard" class="card" style="display:none;">
+    <h2>Current standings</h2>
+    <table id="standingsTable">
+      <thead><tr><th>Pos</th><th>Player(s)</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="challengesCard" class="card" style="display:none;">
+    <h2>Active challenges</h2>
+    <table id="challengesTable">
+      <thead><tr><th>Challenger</th><th>Challenged</th><th>Issued</th><th>Deadline</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="muted" id="noChallengesMsg" style="display:none;">No active challenges right now.</p>
+  </div>
+
+  <div id="issueCard" class="card" style="display:none;">
+    <h2>Issue a challenge</h2>
+    <label for="whoAmI">Who are you?</label>
+    <p class="muted" id="signedInNotice" style="display:none;"></p>
+    <select id="whoAmI"><option value="">-- select your name --</option></select>
+    <div id="eligibleTargets" style="margin-top:1rem;"></div>
+    <div id="issueStatus" class="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Admin</h2>
+    <div id="adminGate">
+      <label for="adminPasscode">Admin passcode</label>
+      <input id="adminPasscode" type="password" placeholder="Enter passcode to unlock result entry">
+      <button id="unlockAdminBtn">Unlock</button>
+      <div id="adminGateStatus" class="status"></div>
+    </div>
+    <div id="adminPanel">
+      <p class="muted">Enter results for active challenges below. This updates ladder positions automatically.</p>
+      <div id="adminChallengesList"></div>
+      <div id="adminStatus" class="status"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // NOTE: the Supabase library loads globally as "supabase", so our client
+  // variable is called "sb" to avoid clashing with it.
+  const SUPABASE_URL = 'https://zauaufublfdsgqvbcrom.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_dUwyPER_FzegXUKFGwqvFA_asKUNorp';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Simple shared passcode gating result entry on this page only.
+  // Not tied to individual member accounts - ask Claude to change this anytime.
+  const ADMIN_PASSCODE = 'rcc-ladder-admin';
+
+  const CHALLENGE_WINDOW_DAYS = 14;
+  const RELOCK_DAYS = 8;
+
+  let members = [];
+  let currentLadderId = null;
+  let currentEntries = [];   // ladder_entries for the selected ladder
+  let currentChallenges = []; // active challenges for the selected ladder
+  let allChallengesForLadder = []; // full history for this ladder (for 8-day lockout checks)
+  let isAdmin = false;
+  let urlMemberId = null;
+  let signedInLabel = '';
+
+  const ladderSelect     = document.getElementById('ladderSelect');
+  const standingsCard    = document.getElementById('standingsCard');
+  const standingsTbody   = document.querySelector('#standingsTable tbody');
+  const challengesCard   = document.getElementById('challengesCard');
+  const challengesTbody  = document.querySelector('#challengesTable tbody');
+  const noChallengesMsg  = document.getElementById('noChallengesMsg');
+  const issueCard        = document.getElementById('issueCard');
+  const whoAmI            = document.getElementById('whoAmI');
+  const signedInNotice   = document.getElementById('signedInNotice');
+  const eligibleTargets  = document.getElementById('eligibleTargets');
+  const issueStatus      = document.getElementById('issueStatus');
+  const adminGate        = document.getElementById('adminGate');
+  const adminPasscode    = document.getElementById('adminPasscode');
+  const unlockAdminBtn   = document.getElementById('unlockAdminBtn');
+  const adminGateStatus  = document.getElementById('adminGateStatus');
+  const adminPanel       = document.getElementById('adminPanel');
+  const adminChallengesList = document.getElementById('adminChallengesList');
+  const adminStatus      = document.getElementById('adminStatus');
+
+  function setStatus(el, msg, isError) {
+    el.textContent = msg;
+    el.className = 'status ' + (isError ? 'error' : 'ok');
+  }
+
+  function nameOf(id) {
+    return (members.find(m => m.id === id) || {}).name || '(unknown)';
+  }
+
+  function entryLabel(entry) {
+    if (!entry) return '(unknown)';
+    return nameOf(entry.member_id_1) + (entry.member_id_2 ? ' & ' + nameOf(entry.member_id_2) : '');
+  }
+
+  function entryById(id) {
+    return currentEntries.find(e => e.id === id);
+  }
+
+  function todayISO() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function addDaysISO(dateStr, days) {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  // ---- Initial data loads ----
+  async function loadMembers() {
+    const { data, error } = await sb.from('members').select('id, name').order('name');
+    if (error) { console.error(error); return; }
+    members = data || [];
+  }
+
+  async function loadLadders() {
+    const { data, error } = await sb
+      .from('ladders')
+      .select('id, name, type, season_year, status')
+      .order('created_at', { ascending: false });
+    if (error) { console.error(error); return; }
+    ladderSelect.innerHTML = '<option value="">-- choose a ladder --</option>' +
+      (data || []).map(l => `<option value="${l.id}">${l.name} (${l.season_year})</option>`).join('');
+  }
+
+  ladderSelect.addEventListener('change', () => {
+    currentLadderId = ladderSelect.value || null;
+    if (!currentLadderId) {
+      standingsCard.style.display = 'none';
+      challengesCard.style.display = 'none';
+      issueCard.style.display = 'none';
+      return;
+    }
+    standingsCard.style.display = '';
+    challengesCard.style.display = '';
+    issueCard.style.display = '';
+    loadLadderData();
+  });
+
+  async function loadLadderData() {
+    const { data: entries } = await sb
+      .from('ladder_entries')
+      .select('id, position, member_id_1, member_id_2')
+      .eq('ladder_id', currentLadderId)
+      .order('position');
+    currentEntries = entries || [];
+
+    const { data: allChal } = await sb
+      .from('challenges')
+      .select('*')
+      .eq('ladder_id', currentLadderId);
+    allChallengesForLadder = allChal || [];
+    currentChallenges = allChallengesForLadder.filter(c => c.status === 'active');
+
+    renderStandings();
+    renderChallenges();
+    renderWhoAmI();
+  }
+
+  function renderStandings() {
+    standingsTbody.innerHTML = currentEntries.map(e =>
+      `<tr><td>${e.position}</td><td>${entryLabel(e)}</td></tr>`
+    ).join('');
+  }
+
+  function renderChallenges() {
+    if (currentChallenges.length === 0) {
+      challengesTbody.innerHTML = '';
+      noChallengesMsg.style.display = '';
+      return;
+    }
+    noChallengesMsg.style.display = 'none';
+    challengesTbody.innerHTML = currentChallenges.map(c => {
+      const isClaimable = todayISO() > c.deadline_date;
+      return `<tr>
+        <td>${entryLabel(entryById(c.challenger_entry_id))}</td>
+        <td>${entryLabel(entryById(c.challenged_entry_id))}</td>
+        <td>${(c.date_issued || '').slice(0,10)}</td>
+        <td>${c.deadline_date}</td>
+        <td>${isClaimable ? '<span class="badge claimable">Claimable</span>' : ''}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function renderWhoAmI() {
+    whoAmI.innerHTML = '<option value="">-- select your name --</option>' +
+      currentEntries.map(e => `<option value="${e.id}">${entryLabel(e)} (pos ${e.position})</option>`).join('');
+    eligibleTargets.innerHTML = '';
+
+    if (urlMemberId) {
+      const myEntry = currentEntries.find(e => e.member_id_1 === urlMemberId || e.member_id_2 === urlMemberId);
+      if (myEntry) {
+        whoAmI.value = myEntry.id;
+        signedInNotice.textContent = 'Signed in as ' + nameOf(urlMemberId) + ' — not you? Choose your name below.';
+        signedInNotice.style.display = '';
+        whoAmI.dispatchEvent(new Event('change'));
+        return;
+      }
+    }
+    signedInNotice.style.display = 'none';
+  }
+
+  whoAmI.addEventListener('change', () => {
+    eligibleTargets.innerHTML = '';
+    setStatus(issueStatus, '', false);
+    const myEntryId = whoAmI.value;
+    if (!myEntryId) return;
+    const me = entryById(myEntryId);
+
+    // Rule 3: only one active challenge at a time as challenger
+    const alreadyChallenging = currentChallenges.some(c => c.challenger_entry_id === myEntryId);
+    if (alreadyChallenging) {
+      eligibleTargets.innerHTML = '<p class="muted">You already have an active challenge in progress.</p>';
+      return;
+    }
+
+    const targets = currentEntries.filter(e => e.position === me.position - 1 || e.position === me.position - 2);
+    if (targets.length === 0) {
+      eligibleTargets.innerHTML = '<p class="muted">No one above you to challenge.</p>';
+      return;
+    }
+
+    const html = targets.map(t => {
+      // Rule 2: 8-day relock after losing to this specific player
+      const recentLoss = allChallengesForLadder.find(c =>
+        c.challenger_entry_id === myEntryId &&
+        c.challenged_entry_id === t.id &&
+        c.winner_entry_id === t.id &&
+        c.date_played &&
+        addDaysISO(c.date_played, RELOCK_DAYS) > todayISO()
+      );
+      // Can't challenge someone already tied up in another active challenge
+      const targetBusy = currentChallenges.some(c => c.challenged_entry_id === t.id);
+
+      let note = '';
+      let disabled = '';
+      if (recentLoss) {
+        note = `<span class="muted"> (locked until ${addDaysISO(recentLoss.date_played, RELOCK_DAYS)})</span>`;
+        disabled = 'disabled';
+      } else if (targetBusy) {
+        note = '<span class="muted"> (already has a pending challenge)</span>';
+        disabled = 'disabled';
+      }
+      return `<button class="eligible-btn" data-target-id="${t.id}" ${disabled}>Challenge ${entryLabel(t)} (pos ${t.position})</button>${note}`;
+    }).join('<br>');
+
+    eligibleTargets.innerHTML = html;
+    eligibleTargets.querySelectorAll('button[data-target-id]').forEach(btn => {
+      btn.addEventListener('click', () => issueChallenge(myEntryId, btn.dataset.targetId));
+    });
+  });
+
+  async function issueChallenge(challengerEntryId, challengedEntryId) {
+    const deadline = addDaysISO(todayISO(), CHALLENGE_WINDOW_DAYS);
+    const { error } = await sb.from('challenges').insert({
+      ladder_id: currentLadderId,
+      challenger_entry_id: challengerEntryId,
+      challenged_entry_id: challengedEntryId,
+      deadline_date: deadline,
+      status: 'active'
+    });
+    if (error) {
+      setStatus(issueStatus, 'Error: ' + error.message, true);
+      return;
+    }
+    setStatus(issueStatus, `Challenge issued. Must be played by ${deadline}.`, false);
+    whoAmI.value = '';
+    eligibleTargets.innerHTML = '';
+    await loadLadderData();
+  }
+
+  // ---- Admin gate ----
+  unlockAdminBtn.addEventListener('click', () => {
+    if (adminPasscode.value === ADMIN_PASSCODE) {
+      isAdmin = true;
+      adminGate.style.display = 'none';
+      adminPanel.style.display = '';
+      renderAdminChallenges();
+    } else {
+      setStatus(adminGateStatus, 'Incorrect passcode.', true);
+    }
+  });
+
+  function renderAdminChallenges() {
+    if (!currentLadderId) {
+      adminChallengesList.innerHTML = '<p class="muted">Choose a ladder above first.</p>';
+      return;
+    }
+    if (currentChallenges.length === 0) {
+      adminChallengesList.innerHTML = '<p class="muted">No active challenges to resolve.</p>';
+      return;
+    }
+    adminChallengesList.innerHTML = currentChallenges.map(c => {
+      const isClaimable = todayISO() > c.deadline_date;
+      return `<div class="card" style="margin-bottom:0.75rem;">
+        <strong>${entryLabel(entryById(c.challenger_entry_id))}</strong> challenged
+        <strong>${entryLabel(entryById(c.challenged_entry_id))}</strong>
+        <span class="muted">(deadline ${c.deadline_date}${isClaimable ? ' — passed' : ''})</span><br>
+        <button class="small" data-action="challenger-won" data-id="${c.id}">Challenger won</button>
+        <button class="small secondary" data-action="challenged-won" data-id="${c.id}">Challenged won</button>
+        <button class="small gold" data-action="claim" data-id="${c.id}">Claim for challenger (not played / unavailable)</button>
+      </div>`;
+    }).join('');
+
+    adminChallengesList.querySelectorAll('button[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => resolveChallenge(btn.dataset.id, btn.dataset.action));
+    });
+  }
+
+  async function resolveChallenge(challengeId, action) {
+    const challenge = currentChallenges.find(c => c.id === challengeId);
+    if (!challenge) return;
+
+    const challengerWon = (action === 'challenger-won' || action === 'claim');
+    const winnerEntryId = challengerWon ? challenge.challenger_entry_id : challenge.challenged_entry_id;
+    const newStatus = action === 'claim' ? 'claimed' : 'completed';
+    const datePlayed = action === 'claim' ? null : todayISO();
+
+    const { error: updateError } = await sb.from('challenges').update({
+      status: newStatus,
+      winner_entry_id: winnerEntryId,
+      date_played: datePlayed
+    }).eq('id', challengeId);
+
+    if (updateError) {
+      setStatus(adminStatus, 'Error: ' + updateError.message, true);
+      return;
+    }
+
+    // If the challenger won (played or claimed), swap ladder positions
+    if (challengerWon) {
+      const challengerEntry = entryById(challenge.challenger_entry_id);
+      const challengedEntry = entryById(challenge.challenged_entry_id);
+      if (challengerEntry && challengedEntry) {
+        const posA = challengerEntry.position;
+        const posB = challengedEntry.position;
+        await sb.from('ladder_entries').update({ position: posB }).eq('id', challengerEntry.id);
+        await sb.from('ladder_entries').update({ position: posA }).eq('id', challengedEntry.id);
+      }
+    }
+
+    setStatus(adminStatus, 'Result recorded.', false);
+    await loadLadderData();
+    renderAdminChallenges();
+  }
+
+  // ---- Init ----
+  (async function init() {
+    const params = new URLSearchParams(window.location.search);
+    urlMemberId = params.get('member') || null;
+
+    await loadMembers();
+    await loadLadders();
+
+    if (urlMemberId) {
+      // Check admin status directly from Supabase - never trust a flag in the URL itself.
+      const { data, error } = await sb
+        .from('members')
+        .select('is_admin')
+        .eq('id', urlMemberId)
+        .single();
+      if (!error && data && data.is_admin) {
+        isAdmin = true;
+        adminGate.style.display = 'none';
+        adminPanel.style.display = '';
+        renderAdminChallenges();
+      }
+    }
+
+    // Carry the member id through to other pages on this site (e.g. "Back to Competitions")
+    if (urlMemberId) {
+      document.querySelectorAll('a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('http') || href.startsWith('#')) return;
+        const sep = href.includes('?') ? '&' : '?';
+        a.setAttribute('href', href + sep + 'member=' + encodeURIComponent(urlMemberId));
+      });
+    }
+  })();
+</script>
+
+</body>
+</html>
