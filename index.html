@@ -81,12 +81,29 @@
   <div class="card">
     <h2>Ladder</h2>
     <p>Ladder rules and standings will appear here once confirmed with the committee.</p>
+    <p><a href="challenges.html" style="color: var(--rcc-green); font-weight: 600;">View ladder &amp; challenges &rarr;</a></p>
   </div>
 </main>
 
 <footer>
   &copy; 2026 Rugby Croquet Club
 </footer>
+
+<script>
+  // Carry the ?member=... identifier through to any page on this site the
+  // person clicks to next, so they stay "signed in" as they move around.
+  (function () {
+    const params = new URLSearchParams(window.location.search);
+    const member = params.get('member');
+    if (!member) return;
+    document.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href');
+      if (!href || href.startsWith('http') || href.startsWith('#')) return;
+      const sep = href.includes('?') ? '&' : '?';
+      a.setAttribute('href', href + sep + 'member=' + encodeURIComponent(member));
+    });
+  })();
+</script>
 
 </body>
 </html>
