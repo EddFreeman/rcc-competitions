@@ -112,6 +112,17 @@
 
 <main>
 
+  <div class="card" id="gateCard">
+    <h2>Admin access required</h2>
+    <p class="muted">This page is for setting up and managing ladders. If you arrived here signed in as an admin from Bookings, this should unlock automatically — otherwise, enter the admin passcode.</p>
+    <label for="adminPasscode">Admin passcode</label>
+    <input id="adminPasscode" type="password" placeholder="Enter passcode">
+    <button id="unlockBtn">Unlock</button>
+    <div id="gateStatus" class="status"></div>
+  </div>
+
+  <div id="adminContent" style="display:none;">
+
   <!-- Step 1: choose or create a ladder -->
   <div class="card">
     <h2>1. Select or create a ladder</h2>
@@ -174,6 +185,8 @@
     </table>
   </div>
 
+  </div>
+
 </main>
 
 <script>
@@ -183,6 +196,34 @@
   const SUPABASE_URL = 'https://zauaufublfdsgqvbcrom.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_dUwyPER_FzegXUKFGwqvFA_asKUNorp';
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Same shared fallback passcode used on the Challenges page - ask Claude to change this anytime.
+  const ADMIN_PASSCODE = 'rcc-ladder-admin';
+
+  const gateCard      = document.getElementById('gateCard');
+  const adminContent  = document.getElementById('adminContent');
+  const adminPasscode = document.getElementById('adminPasscode');
+  const unlockBtn      = document.getElementById('unlockBtn');
+  const gateStatus     = document.getElementById('gateStatus');
+
+  function unlock() {
+    gateCard.style.display = 'none';
+    adminContent.style.display = '';
+  }
+
+  unlockBtn.addEventListener('click', () => {
+    if (adminPasscode.value === ADMIN_PASSCODE) {
+      unlock();
+    } else {
+      setStatus2(gateStatus, 'Incorrect passcode.', true);
+    }
+  });
+
+  function setStatus2(el, msg, isError) {
+    el.textContent = msg;
+    el.className = 'status ' + (isError ? 'error' : 'ok');
+  }
+
 
   let members = [];
   let currentLadderId = null;
@@ -465,6 +506,16 @@
         const sep = href.includes('?') ? '&' : '?';
         a.setAttribute('href', href + sep + 'member=' + encodeURIComponent(urlMemberId));
       });
+
+      // Check admin status directly from Supabase - never trust a flag in the URL itself.
+      const { data, error } = await sb
+        .from('members')
+        .select('is_admin')
+        .eq('id', urlMemberId)
+        .single();
+      if (!error && data && data.is_admin) {
+        unlock();
+      }
     }
   })();
 </script>
