@@ -367,7 +367,7 @@
     if (adminPasscode.value === ADMIN_PASSCODE) {
       isAdmin = true;
       adminGate.style.display = 'none';
-      adminPanel.style.display = '';
+      adminPanel.style.display = 'block';
       renderAdminChallenges();
     } else {
       setStatus(adminGateStatus, 'Incorrect passcode.', true);
@@ -456,7 +456,7 @@
       if (!error && data && data.is_admin) {
         isAdmin = true;
         adminGate.style.display = 'none';
-        adminPanel.style.display = '';
+        adminPanel.style.display = 'block';
         renderAdminChallenges();
       }
     }
