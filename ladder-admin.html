@@ -513,6 +513,7 @@
         .select('is_admin')
         .eq('id', urlMemberId)
         .single();
+      console.log('[Admin check]', { urlMemberId, data, error });
       if (!error && data && data.is_admin) {
         unlock();
       }
