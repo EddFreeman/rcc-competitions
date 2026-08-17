@@ -421,15 +421,26 @@
       return;
     }
 
-    // If the challenger won (played or claimed), swap ladder positions
+    // If the challenger won (played or claimed), swap ladder positions.
+    // ladder_entries has a unique (ladder_id, position) constraint, so we can't
+    // write straight into a position that's still occupied by the other entry -
+    // park the challenger at a temporary position first, then complete the swap.
     if (challengerWon) {
       const challengerEntry = entryById(challenge.challenger_entry_id);
       const challengedEntry = entryById(challenge.challenged_entry_id);
       if (challengerEntry && challengedEntry) {
         const posA = challengerEntry.position;
         const posB = challengedEntry.position;
-        await sb.from('ladder_entries').update({ position: posB }).eq('id', challengerEntry.id);
-        await sb.from('ladder_entries').update({ position: posA }).eq('id', challengedEntry.id);
+        const TEMP_POSITION = -1;
+
+        const step1 = await sb.from('ladder_entries').update({ position: TEMP_POSITION }).eq('id', challengerEntry.id);
+        if (step1.error) { setStatus(adminStatus, 'Error moving positions (step 1): ' + step1.error.message, true); return; }
+
+        const step2 = await sb.from('ladder_entries').update({ position: posA }).eq('id', challengedEntry.id);
+        if (step2.error) { setStatus(adminStatus, 'Error moving positions (step 2): ' + step2.error.message, true); return; }
+
+        const step3 = await sb.from('ladder_entries').update({ position: posB }).eq('id', challengerEntry.id);
+        if (step3.error) { setStatus(adminStatus, 'Error moving positions (step 3): ' + step3.error.message, true); return; }
       }
     }
 
