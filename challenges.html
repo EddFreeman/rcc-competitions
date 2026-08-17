@@ -277,21 +277,52 @@
   }
 
   function renderWhoAmI() {
-    whoAmI.innerHTML = '<option value="">-- select your name --</option>' +
-      currentEntries.map(e => `<option value="${e.id}">${entryLabel(e)} (pos ${e.position})</option>`).join('');
     eligibleTargets.innerHTML = '';
 
-    if (urlMemberId) {
-      const myEntry = currentEntries.find(e => e.member_id_1 === urlMemberId || e.member_id_2 === urlMemberId);
-      if (myEntry) {
-        whoAmI.value = myEntry.id;
-        signedInNotice.textContent = 'Signed in as ' + nameOf(urlMemberId) + ' — not you? Choose your name below.';
-        signedInNotice.style.display = '';
-        whoAmI.dispatchEvent(new Event('change'));
-        return;
+    if (isAdmin) {
+      // Admins can issue a challenge on behalf of anyone.
+      whoAmI.innerHTML = '<option value="">-- select your name --</option>' +
+        currentEntries.map(e => `<option value="${e.id}">${entryLabel(e)} (pos ${e.position})</option>`).join('');
+      if (urlMemberId) {
+        const myEntry = currentEntries.find(e => e.member_id_1 === urlMemberId || e.member_id_2 === urlMemberId);
+        if (myEntry) {
+          whoAmI.value = myEntry.id;
+          signedInNotice.textContent = 'Signed in as ' + nameOf(urlMemberId) + ' (admin — you can also issue on behalf of anyone below).';
+          signedInNotice.style.display = '';
+          whoAmI.dispatchEvent(new Event('change'));
+          return;
+        }
       }
+      signedInNotice.style.display = 'none';
+      return;
     }
-    signedInNotice.style.display = 'none';
+
+    // Non-admins can only issue a challenge as themselves (or their doubles pairing).
+    if (!urlMemberId) {
+      whoAmI.innerHTML = '';
+      whoAmI.style.display = 'none';
+      signedInNotice.textContent = 'Please open this page via the link in Bookings so we know who you are.';
+      signedInNotice.style.display = '';
+      return;
+    }
+
+    const myEntries = currentEntries.filter(e => e.member_id_1 === urlMemberId || e.member_id_2 === urlMemberId);
+    whoAmI.style.display = '';
+    if (myEntries.length === 0) {
+      whoAmI.innerHTML = '';
+      whoAmI.style.display = 'none';
+      signedInNotice.textContent = nameOf(urlMemberId) + ' — you\'re not on this ladder, so you can\'t issue a challenge here.';
+      signedInNotice.style.display = '';
+      return;
+    }
+
+    whoAmI.innerHTML = myEntries.map(e => `<option value="${e.id}">${entryLabel(e)} (pos ${e.position})</option>`).join('');
+    signedInNotice.textContent = 'Signed in as ' + nameOf(urlMemberId) + '.';
+    signedInNotice.style.display = '';
+    if (myEntries.length === 1) {
+      whoAmI.value = myEntries[0].id;
+      whoAmI.dispatchEvent(new Event('change'));
+    }
   }
 
   whoAmI.addEventListener('change', () => {
@@ -386,13 +417,17 @@
     }
     adminChallengesList.innerHTML = currentChallenges.map(c => {
       const isClaimable = todayISO() > c.deadline_date;
+      const deadlineBtn = isClaimable
+        ? `<button class="small gold" data-action="claim-deadline" data-id="${c.id}">Deadline passed — claim for challenger</button>`
+        : `<button class="small gold" disabled title="Available once the deadline (${c.deadline_date}) has passed">Deadline passed — claim for challenger</button>`;
       return `<div class="card" style="margin-bottom:0.75rem;">
         <strong>${entryLabel(entryById(c.challenger_entry_id))}</strong> challenged
         <strong>${entryLabel(entryById(c.challenged_entry_id))}</strong>
         <span class="muted">(deadline ${c.deadline_date}${isClaimable ? ' — passed' : ''})</span><br>
         <button class="small" data-action="challenger-won" data-id="${c.id}">Challenger won</button>
         <button class="small secondary" data-action="challenged-won" data-id="${c.id}">Challenged won</button>
-        <button class="small gold" data-action="claim" data-id="${c.id}">Claim for challenger (not played / unavailable)</button>
+        <button class="small gold" data-action="claim-unavailable" data-id="${c.id}">Player unavailable — claim for challenger</button>
+        ${deadlineBtn}
       </div>`;
     }).join('');
 
@@ -405,10 +440,11 @@
     const challenge = currentChallenges.find(c => c.id === challengeId);
     if (!challenge) return;
 
-    const challengerWon = (action === 'challenger-won' || action === 'claim');
+    const isClaim = (action === 'claim-unavailable' || action === 'claim-deadline');
+    const challengerWon = (action === 'challenger-won' || isClaim);
     const winnerEntryId = challengerWon ? challenge.challenger_entry_id : challenge.challenged_entry_id;
-    const newStatus = action === 'claim' ? 'claimed' : 'completed';
-    const datePlayed = action === 'claim' ? null : todayISO();
+    const newStatus = isClaim ? 'claimed' : 'completed';
+    const datePlayed = isClaim ? null : todayISO();
 
     const { error: updateError } = await sb.from('challenges').update({
       status: newStatus,
